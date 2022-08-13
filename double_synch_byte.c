@@ -38,20 +38,20 @@ extern unsigned char breakDetected;
 extern unsigned char calStep;
 extern unsigned char synchState;
 
-void Initialize_Synchronization( void )
+void Initialize_Synchronization(void)
 {
-   // Initialize UART.
+    // Initialize UART.
     SYNCH_USART_STATCTRL_REG_B |= (1 << SYNCH_RXEN) | (1 << SYNCH_RXCIE);
-    SYNCH_UBRRH = (SYNCH_UBRR >> 8);
+    SYNCH_UBRRH = (SYNCH_UBRR >> 8); //Set baud rate registers
     SYNCH_UBRRL = (SYNCH_UBRR & 0x00ff);
 
-    // Set up INT0 pin as input, no internal pullup.
+    // Set INT0 pin as input, no internal pullup.
     DDR_INT0 &= ~(1 << PIN_NUMBER_INT0);
     PORT_INT0 &= ~(1 << PIN_NUMBER_INT0);
 
     // If 8 bit timer is used, it must be started here.
-    #if  ! defined(NINE_BIT_TIMER)
-    SYNCH_TIMER_PRESCALER_REGISTER |= (1 << CS00);
+    #if ! defined(NINE_BIT_TIMER)
+    SYNCH_TIMER_PRESCALER_REGISTER |= (1 << CS00); // Timer/Counter1 runs at fclk. (no prescaling)
     #endif
 }
 
@@ -60,8 +60,7 @@ void Initialize_Synchronization( void )
 __interrupt void UART_RXC_ISR(void)
 {
     unsigned char temp;
-
-    if (SYNCH_USART_STATCTRL_REG_A & (1 << SYNCH_FE))// Frame error has occured.
+    if (SYNCH_USART_STATCTRL_REG_A & (1 << SYNCH_FE))  // Frame error has occured.
     {
         PREPARE_FOR_SYNCH();
     }
@@ -100,7 +99,8 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
     SYNCH_TIMER_PRESCALER_REGISTER &= ~((1 << CS02) | (1 << CS01) | (1 << CS00));
 
     // Read Timer/Counter0.
-    cycleCount = TCNT0;
+    cycleCount = TCNT0; // Retrieve the low 8 bits.
+	// Use the overflow flag as the high bit of a 9-bit timer.
     cycleCount |= ((SYNCH_TIMER_INT_FLAG_REGISTER & (1 << TOV0)) << (8 - TOV0));
 
     // Reset Timer/Counter0.
@@ -108,7 +108,7 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
     SYNCH_TIMER_INT_FLAG_REGISTER = (1 << TOV0);   // Clear overflow flag.
 
     // Start Timer/Counter0.
-    SYNCH_TIMER_PRESCALER_REGISTER = (1 << CS00);   // Timer/Counter1 runs at fclk.
+    SYNCH_TIMER_PRESCALER_REGISTER = (1 << CS00);   // Timer/Counter1 runs at fclk. (no prescaling)
 #else
     // Read Timer/Counter0.
     cycleCount = TCNT0;
@@ -123,8 +123,7 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
             case (SS_MEASURING):
             {
                 //Set external interrupt 0 to trigger on rising edge.
-                EXT_INT_SENSE_CTRL_REGISTER |= (1 << ISC01) | (1 << ISC00);
-                EXT_INT_FLAG_REGISTER = (1 << INTF0);
+                SET_INT0_RISING();
 
                 if (calStep == 0)
                 {
@@ -152,23 +151,19 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
                     OSCCAL += calStep;
                     NOP();
                 }
-
                 else
                 {
-                   // Perfect match, do nothing.
+                   // Within limits, do nothing.
                 }
-
                 calStep >>= 1;   // Divide by 2.
 
                 if (calStep == 0)
                 {
                     // Binary search complete, set up for neighbor search
                     neighborsSearched = 0;
-                    countDiff = ABS(cycleCount - TARGET_COUNT);
-                    bestCountDiff = countDiff;
+                    bestCountDiff = ABS(cycleCount - TARGET_COUNT);
                     bestOSCCAL = OSCCAL - sign;
                 }
-
                 break;
             }
 
@@ -195,8 +190,8 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
                     // Enable UART receiver.
                     SYNCH_USART_STATCTRL_REG_B |= (1 << SYNCH_RXEN) | (1 << SYNCH_RXCIE);
 
-                    // Disable INT0.
-                    EXT_INT_MASK_REGISTER &= ~(1 << INT0);
+                    // Disable INT0 (external interrupt 0)
+                    DIS_INT0();
                     return;
                 }
                 else
@@ -208,9 +203,7 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
             }
         }
         //Set external interrupt 0 to trigger on falling edge.
-        EXT_INT_SENSE_CTRL_REGISTER |= (1 << ISC01);
-        EXT_INT_SENSE_CTRL_REGISTER &= ~(1 << ISC00);
-        EXT_INT_FLAG_REGISTER = (1 << INTF0);
+        SET_INT0_FALLING();
 
         synchState = SS_MEASURING;
         return;
@@ -220,7 +213,6 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
         // Disable sleep flag. (Ensures that the device
         // does not enter any sleep mode unintended.)
         MCUCR &= ~(1 << SE);
-
         PREPARE_FOR_SYNCH();
         return;
     }

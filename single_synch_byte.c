@@ -5,8 +5,8 @@
  *      Implementation of the single synch byte method.
  *
  *      This file contain the implementation of the single SYNCH byte
- *      synchronization method. The UART RXC interrupt service routine (ISR)
- *      is a part of this implementation. To implement a communication protocol,
+ *      synchronization method. The UART RXC interrupt service routine (ISR) is
+ *      a part of this implementation. To implement a communication protocol,
  *      code to handle reception of UART data must be added in this file or
  *      double_synch_byte.c depending on which method is used.
  *
@@ -36,15 +36,15 @@
 
 extern unsigned char breakDetected;
 extern unsigned char calStep;
-extern unsigned char synchState;
+extern unsigned char synchState; // First set to SS_MEASURING within PREPARE_FOR_SYNCH() routine.
 
 unsigned char defaultOSCCAL;
 
 void Initialize_Synchronization(void)
 {
     // Initialize UART.
-    SYNCH_USART_STATCTRL_REG_B = (1 << SYNCH_RXEN) | (1 << SYNCH_RXCIE);
-    SYNCH_UBRRH = (SYNCH_UBRR >> 8);
+    SYNCH_USART_STATCTRL_REG_B |= (1 << SYNCH_RXEN) | (1 << SYNCH_RXCIE);
+    SYNCH_UBRRH = (SYNCH_UBRR >> 8); //Set baud rate registers
     SYNCH_UBRRL = (SYNCH_UBRR & 0x00ff);
 
     // Set INT0 pin as input, no internal pullup.
@@ -53,12 +53,12 @@ void Initialize_Synchronization(void)
 
     // If 8 bit timer is used, it must be started here.
     #if ! defined(NINE_BIT_TIMER)
-    SYNCH_TIMER_PRESCALER_REGISTER |= (1 << CS00);
+    SYNCH_TIMER_PRESCALER_REGISTER |= (1 << CS00); // Timer/Counter1 runs at fclk. (no prescaling)
     #endif
 
     // Read default OSCCAL value from EEPROM.
     while(EECR & (1 << EEPROM_WRITE_ENABLE))
-    {
+    { // Wait if EEPROM is busy writing
     }
     EEAR = DEFAULT_OSCCAL_ADDRESS;
     EECR |= (1 << EERE);
@@ -103,7 +103,8 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
     SYNCH_TIMER_PRESCALER_REGISTER &= ~((1 << CS02) | (1 << CS01) | (1 << CS00));
 
     // Read Timer/Counter0.
-    cycleCount = TCNT0;
+    cycleCount = TCNT0; // Retrieve the low 8 bits.
+	// Use the overflow flag as the high bit of a 9-bit timer.
     cycleCount |= ((SYNCH_TIMER_INT_FLAG_REGISTER & (1 << TOV0)) << (8 - TOV0));
 
     // Reset Timer/Counter0.
@@ -111,7 +112,7 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
     SYNCH_TIMER_INT_FLAG_REGISTER = (1 << TOV0);   // Clear overflow flag.
 
     // Start Timer/Counter0.
-    SYNCH_TIMER_PRESCALER_REGISTER = (1 << CS00);   // Timer/Counter1 runs at fclk.
+    SYNCH_TIMER_PRESCALER_REGISTER = (1 << CS00);   // Timer/Counter1 runs at fclk. (no prescaling)
 #else
     // Read Timer/Counter0.
     cycleCount = TCNT0;
@@ -123,6 +124,14 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
     if (breakDetected)
     {
         switch(synchState) {
+            case (SS_MEASURING):
+            {
+                //Set external interrupt 0 to trigger on rising edge.
+                SET_INT0_RISING();
+
+                synchState = SS_BINARY_SEARCH;
+                break;
+            }
             case (SS_BINARY_SEARCH):
             {
                 if ( cycleCount > COUNT_HIGH_LIMIT)
@@ -150,27 +159,16 @@ __interrupt void SYNCH_EXT_INT_ISR(void)
                     // Enable UART receiver.
                     SYNCH_USART_STATCTRL_REG_B |= (1 << SYNCH_RXEN);
 
-                    // Disable INT0
-                    EXT_INT_MASK_REGISTER &= ~(1 << INT0);
+                    // Disable INT0 (external interrupt 0)
+                    DIS_INT0();
                 }
                 else
                 {
                     //Set external interrupt 0 to trigger on falling edge.
-                    EXT_INT_SENSE_CTRL_REGISTER |= (1 << ISC01);
-                    EXT_INT_SENSE_CTRL_REGISTER &= ~(1 << ISC00);
-                    EXT_INT_FLAG_REGISTER = (1 << INTF0);
+                    SET_INT0_FALLING();
 
                     synchState = SS_MEASURING;
                 }
-                break;
-            }
-            case (SS_MEASURING):
-            {
-                //Set external interrupt 0 to trigger on rising edge.
-                EXT_INT_SENSE_CTRL_REGISTER |= (1 << ISC01) | (1 << ISC00);
-                EXT_INT_FLAG_REGISTER = (1 << INTF0);
-
-                synchState = SS_BINARY_SEARCH;
                 break;
             }
         }

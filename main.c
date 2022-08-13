@@ -46,6 +46,7 @@ void main(void)
     // For testing only:
     // Set up Timer/counter1 to generate a frequency of fclk/2 on OC2
     SET_OC1A_DIRECTION();
+	//TODO: This probably won't work on ATtiny84/85
     OCR1A = 0x00;
     TCCR1A = (1 << COM1A0);
     TCCR1B = (1 << WGM12) | (1 << CS10);
@@ -61,11 +62,9 @@ void main(void)
 
 void sleep(void)
 {
-    // Set INT0 to trigger on low level.
     __disable_interrupt();
-    EXT_INT_SENSE_CTRL_REGISTER &= ~((1 << ISC01) | (1 << ISC00));
-    EXT_INT_FLAG_REGISTER |= (1 << INTF0);
-    EXT_INT_MASK_REGISTER |= (1 << INT0);
+    SET_INT0_LOW(); // Set INT0 to trigger on low level.
+    EN_INT0();      // Enable INT0 (external interrupt 0)
 
     #if defined(SM2)
     // Set sleep  mode.

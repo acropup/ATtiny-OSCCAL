@@ -36,6 +36,43 @@
 #if !defined(_DEVICE_SPECIFIC_H_)
 #define _DEVICE_SPECIFIC_H_
 
+#if defined(__AVR_ATtiny84__) | defined(__AVR_ATtiny85__)
+
+#define PORT_INT0                          PORTB
+#define DDR_INT0                           DDRB
+#define PIN_NUMBER_INT0                    PORTB0
+#define EXT_INT_MASK_REGISTER              GIMSK
+#define EXT_INT_SENSE_CTRL_REGISTER        MCUCR
+#define EXT_INT_FLAG_REGISTER              GIFR
+#define SYNCH_EXT_INT_vect                 INT0_vect
+
+#define SYNCH_TIMER_PRESCALER_REGISTER     TCCR0B
+#define SYNCH_TIMER_INT_FLAG_REGISTER      TIFR
+
+#define SYNCH_USART_RXC_vect               //USART0_RX_vect
+#define SYNCH_USART_STATCTRL_REG_A         //UCSRA
+#define SYNCH_USART_STATCTRL_REG_B         //UCSRB
+#define SYNCH_UBRRH                        //UBRRH
+#define SYNCH_UBRRL                        //UBRRL
+#define SYNCH_RXEN                         //RXEN
+#define SYNCH_RXCIE                        //RXCIE
+#define SYNCH_UDR                          //UDR
+#define SYNCH_FE                           //FE
+
+#define EEPROM_WRITE_ENABLE                EEPE
+
+#define SET_OC1A_DIRECTION()  //(DDRB |= (1 << PB3))
+
+#define OSCCAL_RESOLUTION                  7
+
+#if defined(NINE_BIT_TIMER)
+#define COUNTER_READ_DELAY    //22
+#else
+#define COUNTER_READ_DELAY    //3
+#endif
+
+#endif
+
 #if defined(__AT90Tiny2313__) | defined(__ATtiny2313__)
 
 #define PORT_INT0                          PORTD

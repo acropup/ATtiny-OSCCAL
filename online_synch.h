@@ -28,13 +28,13 @@
 // Defines controlling synchronization
 // ***********************************************************************
 
-// Synchronization method. Uncomment one of the following to chose
+// Synchronization method. Uncomment one of the following to choose
 // Synchronization method.
 #define SYNCH_METHOD_SINGLE_SYNCH_BYTE
 //#define SYNCH_METHOD_DOUBLE_SYNCH_BYTE
 
-#define TARGET_FREQUENCY      8000000
-#define SYNCH_FREQUENCY       19200
+#define TARGET_FREQUENCY      8000000         // CPU frequency
+#define SYNCH_FREQUENCY       19200           // UART baud rate
 #define SYNCH_UBRR            25              // Baud rate register setting to
                                               // obtain SYNCH_FREQUENCY.
 #define SYNCH_ACCURACY        10              // 10 equals +/-1% (Only
@@ -60,6 +60,7 @@
 // ***********************************************************************
 // Precalculated values
 // ***********************************************************************
+// Expected # of processor ticks between UART bit lengths
 #define TARGET_COUNT      ((TARGET_FREQUENCY / SYNCH_FREQUENCY) - COUNTER_READ_DELAY)
 // Applies only to single synch byte method:
 #define SYNCH_LIMIT       ((TARGET_FREQUENCY / SYNCH_FREQUENCY) * SYNCH_ACCURACY / 1000)
@@ -98,18 +99,38 @@
 // Functions implemented as macros to avoid function calls from within
 // interrupt service routines.
 // ***********************************************************************
+
+//Set external interrupt 0 to trigger on rising edge.
+#define SET_INT0_RISING() \
+EXT_INT_SENSE_CTRL_REGISTER |= (1 << ISC01) | (1 << ISC00); \
+EXT_INT_FLAG_REGISTER = (1 << INTF0);
+
+//Set external interrupt 0 to trigger on falling edge.
+#define SET_INT0_FALLING() \
+EXT_INT_SENSE_CTRL_REGISTER |= (1 << ISC01); \
+EXT_INT_SENSE_CTRL_REGISTER &= ~(1 << ISC00); \
+EXT_INT_FLAG_REGISTER = (1 << INTF0);
+
+//Set external interrupt 0 to trigger on low level.
+#define SET_INT0_LOW() \
+EXT_INT_SENSE_CTRL_REGISTER &= ~((1 << ISC01) | (1 << ISC00)); \
+EXT_INT_FLAG_REGISTER |= (1 << INTF0);
+
+// Disable INT0 (external interrupt 0)
+#define DIS_INT0() EXT_INT_MASK_REGISTER &= ~(1 << INT0)
+// Enable INT0 (external interrupt 0)
+#define EN_INT0() EXT_INT_MASK_REGISTER |= (1 << INT0)
+
 #define PREPARE_FOR_SYNCH() \
 breakDetected = TRUE; \
 synchState = SS_MEASURING; \
 calStep = INITIAL_STEP; \
-SYNCH_USART_STATCTRL_REG_B &= ~(1 << SYNCH_RXEN); \
-EXT_INT_SENSE_CTRL_REGISTER |= (1 << ISC01); \
-EXT_INT_SENSE_CTRL_REGISTER &= ~(1 << ISC00); \
+SYNCH_USART_STATCTRL_REG_B &= ~(1 << SYNCH_RXEN); /*Disable UART receiver.*/\
+SET_INT0_FALLING(); /*Set external interrupt 0 to trigger on falling edge.*/\
 EXT_INT_FLAG_REGISTER |= (1 << INTF0); \
-EXT_INT_MASK_REGISTER |= (1 << INT0); \
+EN_INT0(); /*Enable external interrupt 0.*/\
 OSCCAL = DEFAULT_OSCCAL; \
 NOP();
-
 
 // For ATmega64 and ATmega128, 8 nop instructions must be run after a
 // change in OSCCAL to ensure stability (See errata in datasheet).
@@ -127,15 +148,12 @@ __no_operation(); \
 __no_operation(); \
 __no_operation(); \
 __no_operation();
-
 #else
-
-#define NOP() __no_operation()
-
+#define NOP() __no_operation();
 #endif
 
 // Absolute value macro.
-#define ABS(var) (((var) < 0) ? -(var) : (var));
+#define ABS(var) (((var) < 0) ? -(var) : (var))
 
 // ***********************************************************************
 // Function prototypes
